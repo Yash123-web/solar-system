@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Solar System Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #control-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 10;
+    }
+    #control-panel h3 { margin: 0 0 10px; }
+    .slider-container { margin-bottom: 10px; }
+    .slider-container label { display: inline-block; width: 100px; }
+    #theme-toggle, #pause-resume { margin: 10px 0; padding: 5px 10px; }
+    .tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px;
+      border-radius: 3px;
+      pointer-events: none;
+      display: none;
+    }
+    .dark-theme {
+      background: #1a1a1a;
+      color: white;
+    }
+    .dark-theme #control-panel {
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+    }
+    @media (max-width: 600px) {
+      #control-panel { width: 90%; left: 5%; font-size: 14px; }
+      .slider-container label { width: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="control-panel">
+    <h3>Planet Speed Controls</h3>
+    <div id="sliders"></div>
+    <button id="pause-resume">Pause</button>
+    <button id="theme-toggle">Dark Theme</button>
+  </div>
+  <div id="tooltip" class="tooltip"></div>
+  <script>
+    // Scene setup
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const sunLight = new THREE.PointLight(0xffffff, 1, 100);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
+    scene.add(ambientLight);
+
+    // Camera position
+    camera.position.set(0, 50, 100);
+    camera.lookAt(0, 0, 0);
+
+    // Planets data
+    const planets = [
+      { name: 'Mercury', radius: 0.5, distance: 10, speed: 0.02, color: 0x8c8c8c },
+      { name: 'Venus', radius: 0.8, distance: 15, speed: 0.015, color: 0xffa500 },
+      { name: 'Earth', radius: 1, distance: 20, speed: 0.01, color: 0x0000ff },
+      { name: 'Mars', radius: 0.7, distance: 25, speed: 0.008, color: 0xff0000 },
+      { name: 'Jupiter', radius: 2, distance: 35, speed: 0.005, color: 0xffa07a },
+      { name: 'Saturn', radius: 1.8, distance: 45, speed: 0.004, color: 0xdeb887 },
+      { name: 'Uranus', radius: 1.2, distance: 55, speed: 0.003, color: 0x00ffff },
+      { name: 'Neptune', radius: 1.2, distance: 65, speed: 0.002, color: 0x00008b }
+    ];
+
+    // Create Sun
+    const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+
+    // Create planets
+    const planetMeshes = [];
+    planets.forEach(planet => {
+      const geometry = new THREE.SphereGeometry(planet.radius, 32, 32);
+      const material = new THREE.MeshPhongMaterial({ color: planet.color });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.x = planet.distance;
+      mesh.userData = { name: planet.name, speed: planet.speed, angle: 0 };
+      scene.add(mesh);
+      planetMeshes.push(mesh);
+    });
+
+    // Background stars
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 1000;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i++) {
+      starPositions[i] = (Math.random() - 0.5) * 2000;
+    }
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1 });
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    scene.add(stars);
+
+    // Control panel sliders
+    const slidersDiv = document.getElementById('sliders');
+    planets.forEach((planet, index) => {
+      const container = document.createElement('div');
+      container.className = 'slider-container';
+      container.innerHTML = `
+        <label>${planet.name}</label>
+        <input type="range" min="0" max="0.1" step="0.001" value="${planet.speed}" id="speed-${index}">
+      `;
+      slidersDiv.appendChild(container);
+      document.getElementById(`speed-${index}`).addEventListener('input', (e) => {
+        planetMeshes[index].userData.speed = parseFloat(e.target.value);
+      });
+    });
+
+    // Pause/Resume button
+    let isPaused = false;
+    const pauseResumeBtn = document.getElementById('pause-resume');
+    pauseResumeBtn.addEventListener('click', () => {
+      isPaused = !isPaused;
+      pauseResumeBtn.textContent = isPaused ? 'Resume' : 'Pause';
+    });
+
+    // Dark/Light theme toggle
+    const themeToggleBtn = document.getElementById('theme-toggle');
+    let isDarkTheme = false;
+    themeToggleBtn.addEventListener('click', () => {
+      isDarkTheme = !isDarkTheme;
+      document.body.classList.toggle('dark-theme', isDarkTheme);
+      themeToggleBtn.textContent = isDarkTheme ? 'Light Theme' : 'Dark Theme';
+    });
+
+    // Tooltip for planet hover
+    const tooltip = document.getElementById('tooltip');
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    // Camera controls for zoom and movement
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    document.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      previousMousePosition = { x: e.clientX, y: e.clientY };
+    });
+    document.addEventListener('mouseup', () => { isDragging = false; });
+    document.addEventListener('mousemove', (e) => {
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      if (isDragging) {
+        const deltaMove = {
+          x: e.clientX - previousMousePosition.x,
+          y: e.clientY - previousMousePosition.y
+        };
+        camera.position.x -= deltaMove.x * 0.1;
+        camera.position.y += deltaMove.y * 0.1;
+        camera.lookAt(0, 0, 0);
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      }
+      // Tooltip hover
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(planetMeshes);
+      if (intersects.length > 0) {
+        const planet = intersects[0].object;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${e.clientX + 10}px`;
+        tooltip.style.top = `${e.clientY + 10}px`;
+        tooltip.textContent = planet.userData.name;
+      } else {
+        tooltip.style.display = 'none';
+      }
+    });
+    document.addEventListener('wheel', (e) => {
+      camera.position.z += e.deltaY * 0.1;
+      camera.position.z = Math.max(50, Math.min(200, camera.position.z));
+    });
+
+    // Animation loop
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!isPaused) {
+        const delta = clock.getDelta();
+        planetMeshes.forEach((mesh, index) => {
+          mesh.userData.angle += mesh.userData.speed * delta;
+          mesh.position.x = planets[index].distance * Math.cos(mesh.userData.angle);
+          mesh.position.z = planets[index].distance * Math.sin(mesh.userData.angle);
+          mesh.rotation.y += 0.01; // Planet rotation
+        });
+        sun.rotation.y += 0.005; // Sun rotation
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
